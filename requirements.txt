@@ -1,0 +1,16 @@
+# 核心依赖
+numpy>=1.21.0
+requests>=2.27.0
+
+# 开发和测试依赖
+pytest>=7.0.0
+pytest-cov>=3.0.0
+
+# 代码质量
+black>=22.0.0
+flake8>=4.0.0
+mypy>=0.950
+
+# 文档
+sphinx>=4.5.0
+sphinx-rtd-theme>=1.0.0
