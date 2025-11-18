@@ -56,14 +56,14 @@ class PersonaTagCalculator:
         }
     
     def _calculate_target_proportion(self, missions: List[Any]) -> Dict[str, Any]:
-        """计算侦察目标占比标签"""
+        """计算侦察目标占比标签 - Top3目标及占比"""
         target_counts = Counter([m.target_id for m in missions])
         total = len(missions)
         
-        # 计算Top目标及占比
-        top_targets = []
-        for target_id, count in target_counts.most_common():
-            top_targets.append({
+        # 计算Top3目标及占比
+        top3_targets = []
+        for target_id, count in target_counts.most_common(3):
+            top3_targets.append({
                 'target_id': target_id,
                 'count': count,
                 'percentage': round(count / total * 100, 2)
@@ -71,11 +71,11 @@ class PersonaTagCalculator:
         
         return {
             'total_targets': len(target_counts),
-            'top_targets': top_targets
+            'top3_targets': top3_targets
         }
     
     def _calculate_region_proportion(self, missions: List[Any], target_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """计算侦察区域占比标签"""
+        """计算侦察区域占比标签 - Top3区域及占比"""
         region_counts = Counter()
         
         for mission in missions:
@@ -85,12 +85,12 @@ class PersonaTagCalculator:
         
         total = sum(region_counts.values())
         if total == 0:
-            return {'total_regions': 0, 'top_regions': []}
+            return {'total_regions': 0, 'top3_regions': []}
         
-        # 计算Top区域及占比
-        top_regions = []
-        for region, count in region_counts.most_common():
-            top_regions.append({
+        # 计算Top3区域及占比
+        top3_regions = []
+        for region, count in region_counts.most_common(3):
+            top3_regions.append({
                 'region': region,
                 'count': count,
                 'percentage': round(count / total * 100, 2)
@@ -98,7 +98,7 @@ class PersonaTagCalculator:
         
         return {
             'total_regions': len(region_counts),
-            'top_regions': top_regions
+            'top3_regions': top3_regions
         }
     
     def _calculate_target_category(self, missions: List[Any], target_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -172,11 +172,13 @@ class PersonaTagCalculator:
         }
     
     def _calculate_scout_scenario(self, missions: List[Any]) -> Dict[str, Any]:
-        """计算偏爱侦察场景标签 - 统计task_type和scout_type组合的Top3及占比"""
+        """计算偏爱侦察场景标签 - 统计task_type, scout_type, task_scene, is_precise组合的Top3及占比"""
         scenario_counts = Counter()
         
         for mission in missions:
-            combo = f"{mission.task_type}_{mission.scout_type}"
+            # 使用4个字段组合：task_type, scout_type, task_scene, is_precise
+            is_precise_str = '精确' if mission.is_precise else '非精确'
+            combo = f"{mission.task_type}_{mission.scout_type}_{mission.task_scene}_{is_precise_str}"
             scenario_counts[combo] += 1
         
         total = len(missions)
@@ -186,10 +188,12 @@ class PersonaTagCalculator:
         # 获取Top3组合及占比
         top3 = []
         for combo, count in scenario_counts.most_common(3):
-            parts = combo.split('_', 1)
+            parts = combo.rsplit('_', 3)
             top3.append({
                 'task_type': parts[0] if len(parts) > 0 else '',
                 'scout_type': parts[1] if len(parts) > 1 else '',
+                'task_scene': parts[2] if len(parts) > 2 else '',
+                'is_precise': parts[3] if len(parts) > 3 else '',
                 'count': count,
                 'percentage': round(count / total * 100, 2)
             })

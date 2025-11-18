@@ -34,25 +34,23 @@ def main():
     
     # 2. 初始化算法并生成用户画像
     algorithm = UserPersonaAlgorithm()
-    algorithm_config = {'classification_algorithm': 'auto'}
     
     # 可选：指定时间范围（留空表示不限制）
     # 示例：start_time='2024-01-01', end_time='2024-12-31'
     personas = algorithm.generate_user_persona(
         target_info=targets,
         mission=missions,
-        algorithm=algorithm_config,
         start_time=None,  # 不限制开始时间
         end_time=None     # 不限制结束时间
     )
     
     # 3. 构建JSON结果
     result = {
-        "test_info": {
+        "info": {
             "num_targets": len(targets),
             "num_missions": len(missions),
             "num_users": len(users),
-            "test_date": datetime.now().isoformat()
+            "date": datetime.now().isoformat()
         },
         "personas": [],
         "statistics": {

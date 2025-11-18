@@ -18,18 +18,18 @@ class UserPersonaAlgorithm:
     def generate_user_persona(self,
                             target_info: List[TargetInfo],
                             mission: List[Mission],
-                            algorithm: Dict[str, Any],
-                            params: Dict[str, Any] = None,
                             start_time: str = None,
-                            end_time: str = None) -> List[UserPersona]:
+                            end_time: str = None,
+                            algorithm: Dict[str, Any] = None,
+                            params: Dict[str, Any] = None) -> List[UserPersona]:
         """
         生成用户画像
         :param target_info: 目标信息数据列表
         :param mission: 历史需求数据列表
-        :param algorithm: 算法相关参数
-        :param params: 扩充参数
         :param start_time: 开始时间（可选，格式：YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS）
         :param end_time: 结束时间（可选，格式：YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS）
+        :param algorithm: 算法配置参数（可选，当前使用统计规则，此参数保留用于兼容性）
+        :param params: 扩充参数
         :return: 用户画像结果列表
         """
         
@@ -43,29 +43,29 @@ class UserPersonaAlgorithm:
         
         try:
             # 1. 数据预处理和验证
-            self._validate_input_data(target_info, mission, algorithm)
+            self._validate_input_data(target_info, mission)
             
-            # 1.5. 根据时间范围过滤任务
+            # 2. 根据时间范围过滤任务
             filtered_mission = self._filter_missions_by_time(mission, start_time, end_time)
             if len(filtered_mission) < len(mission):
                 self.logger.info(f"时间过滤后保留 {len(filtered_mission)} 条需求")
             mission = filtered_mission
             
-            # 2. 按用户分组处理
+            # 3. 按用户分组处理
             user_personas = []
             user_groups = self._group_missions_by_user(mission, target_info)
             
             for user_key, (user_id, user_missions, related_targets) in user_groups.items():
                 self.logger.info(f"处理用户 {user_key}, 相关需求数量: {len(user_missions)}")
                 
-                # 3. 使用统计规则生成画像标签
+                # 4. 使用统计规则生成画像标签
                 persona_tags = self.tag_calculator.generate_persona_tags(
                     user_missions, related_targets
                 )
                 
                 self.logger.info(f"用户 {user_key} 画像标签生成完成")
                 
-                # 4. 生成用户画像对象
+                # 5. 生成用户画像对象
                 user_persona = UserPersona(
                     user_id=user_id,
                     persona_tags=persona_tags,
@@ -85,19 +85,13 @@ class UserPersonaAlgorithm:
             self.logger.error(f"用户画像生成失败: {str(e)}")
             raise
     
-    def _validate_input_data(self, target_info: List[TargetInfo], mission: List[Mission], algorithm: Dict[str, Any]):
+    def _validate_input_data(self, target_info: List[TargetInfo], mission: List[Mission]):
         """验证输入数据"""
         if not target_info:
             raise ValueError("目标信息数据列表不能为空")
         
         if not mission:
             raise ValueError("历史需求数据列表不能为空")
-        
-        if not algorithm:
-            raise ValueError("算法参数不能为空")
-        
-        # 算法参数已不再需要验证（使用统计规则）
-        pass
     
     def _group_missions_by_user(self, missions: List[Mission], targets: List[TargetInfo]) -> Dict[str, tuple]:
         """按用户分组需求数据"""
@@ -170,30 +164,24 @@ class UserPersonaAlgorithm:
 
 def user_persona_algorithm_api(target_info: List[TargetInfo],
                               mission: List[Mission],
-                              algorithm: Dict[str, Any],
-                              params: Dict[str, Any] = None,
                               start_time: str = None,
-                              end_time: str = None) -> List[UserPersona]:
+                              end_time: str = None,
+                              algorithm: Dict[str, Any] = None,
+                              params: Dict[str, Any] = None) -> List[UserPersona]:
     """
     用户画像算法API入口函数
     
     :param target_info: 目标信息数据列表
-    :param mission: 历史需求数据列表  
-    :param algorithm: 算法相关参数
-    :param params: 扩充参数
+    :param mission: 历史需求数据列表
     :param start_time: 开始时间（可选，格式：YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS）
     :param end_time: 结束时间（可选，格式：YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS）
+    :param algorithm: 算法配置参数（可选，保留用于兼容性）
+    :param params: 扩充参数
     :return: 用户画像结果列表
     """
-    
-    # 统计规则不需要算法参数
-    if algorithm is None:
-        algorithm = {}
-    if params is None:
-        params = {}
     
     # 创建算法实例并执行
     persona_algorithm = UserPersonaAlgorithm()
     return persona_algorithm.generate_user_persona(
-        target_info, mission, algorithm, params, start_time, end_time
+        target_info, mission, start_time, end_time, algorithm, params
     )

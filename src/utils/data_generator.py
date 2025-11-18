@@ -104,14 +104,20 @@ def generate_smart_data(num_targets: int = 2, num_missions: int = 100,
         groups = ["华北区组", "华东区组", "华南区组", "华西区组", "东北区组", "西北区组"]
         scout_types = ["电子侦察", "光学侦察", "雷达侦察", "通信侦察", "红外侦察", "多光谱侦察"]
         countries = ["目标国A", "目标国B", "目标国C", "目标国D", "目标国E", "目标国F"]
-        task_types = ["目标侦察", "持续监控", "电子侦察", "目标评估", "综合侦察"]
+        task_types = ["1", "2", "3", "4", "5"]
+        task_scenes = ["海上", "陆地", "空中", "太空", "网络"]
+        req_cycles = ["单次", "周期性", "连续"]
+        mission_play_types = ["自动筹划", "半自动筹划", "人工筹划"]
     else:
         # 大规模：扩展配置
         units = ["第一情报部", "第二技术部", "第三作战部", "第四指挥部", "第五后勤部", "第六通信部", "第七装备部"]
         groups = ["华北区组", "华东区组", "华南区组", "华西区组", "东北区组", "西北区组", "华中区组", "西南区组"]
         scout_types = ["电子侦察", "光学侦察", "雷达侦察", "通信侦察", "红外侦察", "多光谱侦察", "合成孔径雷达", "信号情报"]
         countries = ["目标国A", "目标国B", "目标国C", "目标国D", "目标国E", "目标国F", "目标国G", "目标国H"]
-        task_types = ["目标侦察", "持续监控", "电子侦察", "目标评估", "综合侦察", "威胁评估", "态势感知"]
+        task_types = ["1", "2", "3", "4", "5"]
+        task_scenes = ["海上", "陆地", "空中", "太空", "网络", "联合", "多域"]
+        req_cycles = ["单次", "周期性", "连续", "临时"]
+        mission_play_types = ["自动筹划", "半自动筹划", "人工筹划", "智能筹划"]
     
     emcon_options = ["是", "否"]
     
@@ -222,6 +228,18 @@ def generate_smart_data(num_targets: int = 2, num_missions: int = 100,
             minutes_offset = random.randint(0, 59)
             req_time = base_time + timedelta(days=days_offset, hours=hours_offset, minutes=minutes_offset)
             
+            # 生成新字段数据
+            req_cycle_val = random.choice(req_cycles)
+            if req_cycle_val == "周期性":
+                cycle_time = random.randint(1, 30)
+                req_times_val = random.randint(2, 10)
+            elif req_cycle_val == "连续":
+                cycle_time = 1
+                req_times_val = random.randint(10, 100)
+            else:  # 单次
+                cycle_time = 0
+                req_times_val = 1
+            
             mission = Mission(
                 req_id=f"REQ{len(missions)+1:06d}",
                 topic_id=f"TP{len(missions)+1:06d}",
@@ -234,7 +252,14 @@ def generate_smart_data(num_targets: int = 2, num_missions: int = 100,
                 country_name=random.choice(countries),
                 target_priority=round(random.uniform(0.1, 1.0), 1),
                 is_emcon=random.choice(emcon_options),
-                scout_type=random.choice(scout_types)
+                is_precise=random.choice([True, False]),
+                scout_type=random.choice(scout_types),
+                task_scene=random.choice(task_scenes),
+                resolution=round(random.uniform(0.5, 1.0), 2),
+                req_cycle=req_cycle_val,
+                req_cycle_time=str(cycle_time),
+                req_times=req_times_val,
+                mission_play_type=random.choice(mission_play_types)
             )
             missions.append(mission)
             total_generated += 1
@@ -278,7 +303,8 @@ def save_data_to_files(target_info: List[TargetInfo], missions: List[Mission],
     # 保存任务信息
     with open(mission_file, 'w', encoding='utf-8') as f:
         f.write("需求ID\t专题ID\t部门\t区组\t开始时间\t结束时间\t任务类型\t目标ID\t"
-               f"国家\t优先级\t电磁管制\t侦察类型\n")
+               f"国家\t优先级\t电磁管制\t是否精确\t侦察类型\t任务场景\t分辨率\t"
+               f"需求周期\t周期次数\t需求次数\t筹划方式\n")
         
         if len(missions) >= 10000:
             # 大数据：批量写入
@@ -289,7 +315,10 @@ def save_data_to_files(target_info: List[TargetInfo], missions: List[Mission],
                     f.write(f"{mission.req_id}\t{mission.topic_id}\t{mission.req_unit}\t"
                            f"{mission.req_group}\t{mission.req_start_time}\t{mission.req_end_time}\t"
                            f"{mission.task_type}\t{mission.target_id}\t{mission.country_name}\t"
-                           f"{mission.target_priority}\t{mission.is_emcon}\t{mission.scout_type}\n")
+                           f"{mission.target_priority}\t{mission.is_emcon}\t{mission.is_precise}\t"
+                           f"{mission.scout_type}\t{mission.task_scene}\t{mission.resolution}\t"
+                           f"{mission.req_cycle}\t{mission.req_cycle_time}\t{mission.req_times}\t"
+                           f"{mission.mission_play_type}\n")
                 
                 progress = ((i + len(batch)) / len(missions)) * 100
                 if len(missions) >= 50000:
@@ -300,7 +329,10 @@ def save_data_to_files(target_info: List[TargetInfo], missions: List[Mission],
                 f.write(f"{mission.req_id}\t{mission.topic_id}\t{mission.req_unit}\t"
                        f"{mission.req_group}\t{mission.req_start_time}\t{mission.req_end_time}\t"
                        f"{mission.task_type}\t{mission.target_id}\t{mission.country_name}\t"
-                       f"{mission.target_priority}\t{mission.is_emcon}\t{mission.scout_type}\n")
+                       f"{mission.target_priority}\t{mission.is_emcon}\t{mission.is_precise}\t"
+                       f"{mission.scout_type}\t{mission.task_scene}\t{mission.resolution}\t"
+                       f"{mission.req_cycle}\t{mission.req_cycle_time}\t{mission.req_times}\t"
+                       f"{mission.mission_play_type}\n")
     
     save_time = time.time() - save_start
     print(f"✅ 文件保存完成！用时: {save_time:.1f} 秒")
