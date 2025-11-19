@@ -12,7 +12,6 @@ class UserPersonaAlgorithm:
     """用户画像算法主类"""
     
     def __init__(self):
-        self.tag_calculator = PersonaTagCalculator()
         self.logger = self._setup_logger()
     
     def generate_user_persona(self,
@@ -28,15 +27,36 @@ class UserPersonaAlgorithm:
         :param mission: 历史需求数据列表
         :param start_time: 开始时间（可选，格式：YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS）
         :param end_time: 结束时间（可选，格式：YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS）
-        :param algorithm: 算法配置参数（可选，当前使用统计规则，此参数保留用于兼容性）
+        :param algorithm: 算法配置参数（可选）
+            - preference_algorithm: 偏好计算算法
+                - 'auto': 自动选择（根据数据特征）[默认]
+                    - HHI > 0.05: percentage
+                    - HHI ≤ 0.05 时:
+                        - 用户≥10 + 目标≥20: tfidf
+                        - 用户≥5 + 目标≥10 + CV>1.0: bm25
+                        - 用户≥5 + 目标≥10 + CV≤1.0: tfidf
+                        - 目标≥5: zscore
+                        - 目标<5: percentage
+                - 'percentage': 简单百分比Top-N
+                - 'tfidf': TF-IDF算法（需全局统计，识别用户特有偏好）
+                - 'bm25': BM25算法（需全局统计，考虑饱和度）
+                - 'zscore': Z-score显著性过滤（单用户统计检验）
+            - top_n: 输出前N个结果，默认3
         :param params: 扩充参数
         :return: 用户画像结果列表
         """
         
         if params is None:
             params = {}
+        if algorithm is None:
+            algorithm = {}
         
         self.logger.info("开始生成用户画像")
+        
+        # 解析算法配置
+        preference_algo = algorithm.get('preference_algorithm', 'auto')
+        self.logger.info(f"偏好计算算法: {preference_algo}")
+        
         if start_time or end_time:
             self.logger.info(f"时间范围: {start_time or '不限'} 至 {end_time or '不限'}")
         self.logger.info(f"输入数据: {len(target_info)} 个目标, {len(mission)} 条历史需求")
@@ -51,27 +71,34 @@ class UserPersonaAlgorithm:
                 self.logger.info(f"时间过滤后保留 {len(filtered_mission)} 条需求")
             mission = filtered_mission
             
-            # 3. 按用户分组处理
+            # 3. 计算全局统计（用于TF-IDF/BM25算法）
+            if preference_algo in ['auto', 'tfidf', 'bm25']:
+                global_stats = self._calculate_global_stats(mission)
+                algorithm['global_stats'] = global_stats
+                self.logger.info(f"全局统计: {global_stats['total_users']}个用户, "
+                               f"平均每用户{global_stats['avg_mission_count']:.1f}条任务")
+            
+            # 4. 创建标签计算器（传入算法配置）
+            tag_calculator = PersonaTagCalculator(algorithm_config=algorithm)
+            
+            # 5. 按用户分组处理
             user_personas = []
             user_groups = self._group_missions_by_user(mission, target_info)
             
             for user_key, (user_id, user_missions, related_targets) in user_groups.items():
                 self.logger.info(f"处理用户 {user_key}, 相关需求数量: {len(user_missions)}")
                 
-                # 4. 使用统计规则生成画像标签
-                persona_tags = self.tag_calculator.generate_persona_tags(
+                # 6. 使用统计规则生成画像标签
+                persona_tags = tag_calculator.generate_persona_tags(
                     user_missions, related_targets
                 )
                 
                 self.logger.info(f"用户 {user_key} 画像标签生成完成")
                 
-                # 5. 生成用户画像对象
+                # 6. 生成用户画像对象
                 user_persona = UserPersona(
                     user_id=user_id,
                     persona_tags=persona_tags,
-                    confidence_score=1.0,  # 统计规则100%置信度
-                    feature_importance={},  # 不再需要特征重要性
-                    algorithm_used='statistical_rules',  # 使用统计规则
                     generation_time=datetime.now().isoformat()
                 )
                 
@@ -93,6 +120,39 @@ class UserPersonaAlgorithm:
         if not mission:
             raise ValueError("历史需求数据列表不能为空")
     
+    def _calculate_global_stats(self, missions: List[Mission]) -> Dict[str, Any]:
+        """
+        计算全局统计信息，用于TF-IDF和BM25算法
+        :param missions: 所有用户的任务列表
+        :return: 全局统计字典
+        """
+        from collections import Counter, defaultdict
+        
+        # 统计每个目标被多少个用户使用
+        target_user_count = defaultdict(set)
+        user_mission_count = defaultdict(int)
+        
+        for mission in missions:
+            user_key = f"{mission.req_unit}_{mission.req_group}"
+            target_user_count[mission.target_id].add(user_key)
+            user_mission_count[user_key] += 1
+        
+        # 转换为计数
+        target_user_count_dict = {
+            target_id: len(users) 
+            for target_id, users in target_user_count.items()
+        }
+        
+        # 计算平均任务数
+        total_users = len(user_mission_count)
+        avg_mission_count = sum(user_mission_count.values()) / total_users if total_users > 0 else 0
+        
+        return {
+            'target_user_count': target_user_count_dict,  # 每个目标被多少用户使用
+            'total_users': total_users,                    # 总用户数
+            'avg_mission_count': avg_mission_count         # 平均每用户任务数
+        }
+    
     def _group_missions_by_user(self, missions: List[Mission], targets: List[TargetInfo]) -> Dict[str, tuple]:
         """按用户分组需求数据"""
         target_dict = {target.target_id: target for target in targets}
@@ -103,8 +163,12 @@ class UserPersonaAlgorithm:
             user_key = f"{mission.req_unit}_{mission.req_group}"
             
             if user_key not in grouped_missions:
-                # 直接使用user_key作为user_id
-                grouped_missions[user_key] = (user_key, [], [])
+                # 使用dict格式作为user_id
+                user_id_dict = {
+                    'req_unit': mission.req_unit,
+                    'req_group': mission.req_group
+                }
+                grouped_missions[user_key] = (user_id_dict, [], [])
             
             # 添加任务到用户组
             grouped_missions[user_key][1].append(mission)

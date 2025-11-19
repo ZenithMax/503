@@ -41,7 +41,8 @@ def main():
         target_info=targets,
         mission=missions,
         start_time=None,  # 不限制开始时间
-        end_time=None     # 不限制结束时间
+        end_time=None,     # 不限制结束时间
+        algorithm={'preference_algorithm': 'percentage'}
     )
     
     # 3. 构建JSON结果
@@ -60,12 +61,7 @@ def main():
     
     # 添加用户画像数据
     for persona in personas:
-        persona_data = {
-            "user_id": persona.user_id,
-            "persona_tags": persona.persona_tags,
-            "generation_time": persona.generation_time
-        }
-        result["personas"].append(persona_data)
+        result["personas"].append(persona.to_dict())
     
     # 4. 输出JSON结果
     print(json.dumps(result, ensure_ascii=False, indent=2))
